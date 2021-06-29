@@ -4,6 +4,7 @@ import requests
 #Connexion au compte du bot
 S = requests.Session()
 
+
 URL = "https://fr.wikipedia.org/w/api.php"
 """
 # Retrieve login token first
@@ -57,13 +58,31 @@ def inport(page):
     
     return DATA["parse"]["wikitext"]["*"]
     
-def fetch(page, chaine, typ):
+def fetch(page, chaine):
     page = inport(page)
-    if typ == 'lien':
-        
+    try:
+        return page.index(chaine)
+    except ValueError:
+        return -1
 
+def browse(cat):
+    scope = []
+    URL = 'https://fr.wikipedia.org/w/api.php'
+    PARAMS = {
+        'action':'query',
+        'prop':'links|categories',
+        'list':'categorymembers',
+        'format':'json',
+        'cmtitle':cat,
+        'cmlimit':'5000'
+        }
+    r = S.post(url=URL, params=PARAMS)
+    data = r.json()
+    for k in data['query']['categorymembers']:
+        scope.append(k['title'])
+    return scope
 
-
+k = browse('Catégorie:Physique')
 
 
 
