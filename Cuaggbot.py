@@ -44,7 +44,7 @@ editToken = DATA['query']['tokens']['csrftoken']
 
 
 def inport(page):
-    """Permet d'importer une page donéée en paramètre"""
+    """Permet d'importer une page donnée en paramètre"""
     URL = "https://fr.wikipedia.org/w/api.php"
     
     PARAMS = {
@@ -60,52 +60,84 @@ def inport(page):
     return DATA["parse"]["wikitext"]["*"]
     
 def fetch(page, chaine):
-    page = inport(page)
     try:
         return page.index(chaine)
     except ValueError:
         return -1
 
-def browse(cat):
+def browse(cat, cmcont=''):
     scope = []
     URL = 'https://fr.wikipedia.org/w/api.php'
     PARAMS = {
         'action':'query',
-        'prop':'links|categories',
+        'prop':'links',
         'list':'categorymembers',
         'format':'json',
         'cmtitle':cat,
-        'cmlimit':'5000'
+        'cmlimit':'500',
+        'cmcontinue':cmcont
         }
     r = S.post(url=URL, params=PARAMS)
     data = r.json()
     for k in data['query']['categorymembers']:
         scope.append(k['title'])
+    suite = True
+    while suite:
+        try:
+            cont = data['continue']['cmcontinue']
+            print(data['continue']['cmcontinue'])
+            PARAMS.__setitem__('plcontinue', cont)
+            scope += browse(cat, cont)
+            suite = False
+        except:
+            suite = False
     return scope
 
 
 # Bout de code Evaluation
 def éval(projet):
     scope = []
-    #Je voudrais bien utiliser Portail-éval, le gadget d'Orlodrim, pour remplir le scope
-    #Les catégories ne sont pas exhaustives
-    for k in scope:
-        date = time.asctime()[:10]
-        #Manque ici une prise en compte du cas où l'article est évalué par un autre portail
-        #Et on pourrait vérifier aussi que l'évaluation manque réellement pour notre projet, au cas où
-        prep = "{{évaluation|titre=''"+str(k)+"''|diff=|date=''"+ date +"''|importance=''[[Projet:Évaluation/Importance|à évaluer]]''|avancement=''[[Projet:Évaluation/Avancement|à évaluer]]''}}"
-        PARAMS = {
-            'action':'edit',
-            'title':'Discussion:'+k,
-            'section':'0',
-            'prepend':prep,
-            'format':'json',
-            'token':editToken
-            }
-        r = S.post(url = 'https://fr.wikipedia.org/w/api.php', params = PARAMS)
+    #Remplissage du scope
+    portail = browse('Catégorie:Portail:'+projet+'/Articles liés')
+    for k in scope: #Traitement des articles présents dans le scope 
+        time.sleep(20)
+        page = inport('Discussion:' + k)
+        test = fetch(page, '{{Wikiprojet')
+        if test==-1:
+            prep = "{{Wikiprojet|"+projet+"|importance=?|avancement=?}}"
+            PARAMS = {
+                'action':'edit',
+                'title':'Discussion:'+k,
+                'section':'0',
+                'prepend':prep,
+                'format':'json',
+                'token':editToken
+                }
+            r = S.post(url = 'https://fr.wikipedia.org/w/api.php', params = PARAMS)
+        else:
+            pageA = page[:test+13]
+            pageB = page[test:]
+            pageB = pageB[:fetch(pageB, 'avancement')]
+            pageB.split('|') #Séparation des paramètres du modèle
+            projets = []
+            for j in range(len(pageB//2)):
+                projets.append(pageB[2*j+1]) #Récupération des projets évalués
+            if projet not in projets:
+                pageC = page[test+13:]
+                supp = projet + '|?'
+                page = pageA + supp + pageC
+                PARAMS = {
+                    'action':'edit',
+                    'title':'Discussion:'+k,
+                    'bot':'true',
+                    'token':editToken,
+                    'text':page,
+                    'summary':'Apposition du modèle Wikiprojet pour le projet '+ projet
+                    }
+                r = S.post(url='https://fr.wikipedia.fr/w/api.php', params=PARAMS)
 
 #Requête de test
-éval("Abbeville")
+
 
 
 
