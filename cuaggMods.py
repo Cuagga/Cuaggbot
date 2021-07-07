@@ -9,7 +9,7 @@ import time
 
 soft_headers = {"User-Agent" : "CuaggBot (https://fr.wikipedia.org/wiki/Utilisateur:Cuaggbot)"}
 botUN ='Cuaggbot'
-botPW = 'X9LnvynUASfFDCR'
+botPW = '6iJCA3KJe8NykeH'
 
 url = 'https://fr.wikipedia.org/w/api.php'
 
@@ -40,6 +40,7 @@ def login():
     current_data = current_request.json()
     login_result = current_data["login"]["result"]
     if login_result == "Success":
+        print('Connecté')
         return True
     else:
         return False
@@ -114,17 +115,16 @@ def browse(cat, cmcont=''):
     while suite:
         try:
             cont = data['continue']['cmcontinue']
-            print(data['continue']['cmcontinue'])
             PARAMS.__setitem__('plcontinue', cont)
             scope += browse(cat, cont)
             suite = False
         except:
             suite = False
-    print(scope)
     return scope
 
 def edit(page, text, summary = '', minor=1, isBot=1):
     wait = 5
+    slp = 10
     retry = True
     while retry == True:
         tupel = getEditToken(page)
@@ -152,16 +152,18 @@ def edit(page, text, summary = '', minor=1, isBot=1):
             result = data['edit']['result']
             if result=='Success':
                 retry = False
+                time.sleep(slp)
             else:
+                print('Réessai sur la page' + page)
                 time.sleep(wait)
         except:
             print('Erreur')
             time.sleep(wait)
 
 def éval(projet):
-    scope = []
     #Remplissage du scope
     scope = browse('Catégorie:Portail:'+projet+'/Articles liés')
+    print('browsed')
     for k in scope: #Traitement des articles présents dans le scope 
         page = inport('Discussion:' + k)
         if page == -1:
@@ -169,25 +171,39 @@ def éval(projet):
         test = fetch(page, '{{Wikiprojet')
         if test == -1:
             test = fetch(page, '{{wikiprojet')
-        if test==-1:
+            
+        if test == -1:
             prep = "{{Wikiprojet|"+projet+"|importance=?|avancement=?}}"
             page = prep + page
-            edit('Discussion:'+k, page, summary='Apposition du modèle Wikiprojet|Abbeville')
-            time.sleep(15)
+            edit('Discussion:'+k, page, summary='Apposition du modèle Wikiprojet|'+projet)
+            print(k + ':Done')
+
         else:
             pageA = page[:test+13]
             pageB = page[test:]
-            
             pageB = pageB[:fetch(pageB, 'avancement')]
             pageB = pageB.split('|') #Séparation des paramètres du modèle
-            projets = []
-            for j in range(len(pageB)//2):
-                projets.append(pageB[2*j+1]) #Récupération des projets évalués
-            if projet not in projets:
+            if projet not in pageB:
                 pageC = page[test+13:]
                 supp = '|' + projet + '|?'
                 page = pageA + supp + pageC
-                edit('Discussion:'+k, page, summary='Apposition du modèle Wikiprojet|Abbeville')
-                time.sleep(15)
+                edit('Discussion:'+k, page, summary='Apposition du modèle Wikiprojet|'+projet)
+                print(k + ':Edited')
             else:
-                pass
+                print(k + ':Done')
+
+
+def depCat(cat):
+    scope = browse(cat)
+    for k in scope:
+        page=inport(k)
+        if page == -1:
+            page = ""
+        test = fetch(page, cat.capitalize())
+        if test == -1:
+            test = fetch(page, cat.lower())
+        if test != -1:
+            pageA = page[:test]
+            pageB = page[test+len(cat):]
+            page = pageA+pageB
+            edit(k, page, summary='Retrait de la catégorie '+cat)

@@ -11,5 +11,4 @@ S = requests.Session()
 
 
 login()
-waitFile = []
-
+éval('Armes')
