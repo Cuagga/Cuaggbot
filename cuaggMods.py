@@ -72,26 +72,32 @@ def getEditToken(page):
     return edit_token, last_revision_time, current_time
 
 def inport(page):
-
     URL = "https://fr.wikipedia.org/w/api.php"
-    
     PARAMS = {
         "action": "parse",
         "page": page,
         "prop":"wikitext",
         "format": "json"
     }
-    R = requests.post(url=URL, params=PARAMS)
-    print(R)
-    DATA = R.json()
+    réussite = False
+    while réussite == False:
+        try:
+            R = requests.post(url=URL, params=PARAMS)
+            DATA = R.json()
+            réussite = True
+            time.sleep(.5)
+        except:
+            print('Réessai')
+            time.sleep(10)
+            continue
     try:
-        return DATA
+        return DATA['parse']['wikitext']['*']
     except:
         return -1
     
-def fetch(page, chaine):
+def fetch(page, chaine, start=0):
     try:
-        return page.index(chaine)
+        return page.index(chaine, start)
     except ValueError:
         return -1
 
@@ -109,7 +115,6 @@ def browse(cat, cmcont=''):
         }
     r = requests.post(url=URL, params=PARAMS)
     data = r.json()
-    print(data)
     for k in data['query']['categorymembers']:
         scope.append(k['title'])
     suite = True
@@ -125,7 +130,7 @@ def browse(cat, cmcont=''):
 
 def edit(page, text, summary = '', minor=1, isBot=1):
     wait = 5
-    slp = 10
+    slp = 6
     retry = True
     while retry == True:
         tupel = getEditToken(page)
@@ -149,7 +154,9 @@ def edit(page, text, summary = '', minor=1, isBot=1):
 			}
         req = S.post(url, data=params0)
         data = req.json()
+        print(data)
         try:
+            time.sleep(5)
             result = data['edit']['result']
             if result=='Success':
                 retry = False
@@ -159,18 +166,25 @@ def edit(page, text, summary = '', minor=1, isBot=1):
                 time.sleep(wait)
         except:
             print('Erreur')
-            time.sleep(wait)
+            if data['error']['code'] == 'assertuserfailed':
+                login()
+            else:
+                print('Non fait')
+                return
+            time.sleep(1)
 
-def éval(projet, start='', end = -1):
+def éval(projet, start='', end = -1, alias=''):
     #Remplissage du scope
+    if alias == '':
+        alias = projet    
     scope = browse('Catégorie:Portail:'+projet+'/Articles liés')
-    a = 0
-    while scope[a] < start:
-        a += 1
+    print('browsed')
+    while scope[0] < start:
+        scope = scope[1:]
     count = 0
+    print(scope[0])
     while count != end:
-        print('browsed')
-        for k in scope[a:]: #Traitement des articles présents dans le scope 
+        for k in scope: #Traitement des articles présents dans le scope 
             page = inport('Discussion:' + k)
             if page == -1:
                 page = ''
@@ -178,20 +192,23 @@ def éval(projet, start='', end = -1):
             if test == -1:
                 test = fetch(page, '{{wikiprojet')
             if test == -1:
-                prep = "{{Wikiprojet|"+projet+"|?|avancement=?}}"
+                prep = "{{Wikiprojet|"+projet+"|?|avancement=?}}\n\n"
                 page = prep + page
+                print(k + ':Created')
                 edit('Discussion:'+k, page, summary='Apposition du modèle Wikiprojet|'+projet)
                 count += 1
-                print(k + ':Created')
             else:
                 pageA = page[:test+13]
                 pageB = page[test:fetch(page, 'avancement')]
                 pageB = pageB.split('|') #Séparation des paramètres du modèle
                 for j in range(len(pageB)):
                     pageB[j] = pageB[j].lower().strip()
-                if projet.lower() not in pageB:
+                if alias.lower() not in pageB and projet.lower() not in pageB:
                     pageC = page[test+13:]
-                    supp = '|' + projet + '|?'
+                    if pageA[-1] == '|':
+                        supp = projet + '|?|\n'
+                    else:
+                        supp = '|' + projet + '|?\n'
                     page = pageA + supp + pageC
                     print(k + ':Editing')
                     edit('Discussion:'+k, page, summary='Apposition du modèle Wikiprojet|'+projet)
@@ -236,7 +253,7 @@ def desEval(projet, alias=''):
 def depCat(cat):
     scope = browse(cat)
     for k in scope:
-        page=inport(k)
+        page = inport(k)
         if page == -1:
             page = ""
         test = fetch(page, cat.capitalize())
@@ -262,7 +279,7 @@ def countMods(modèle, cont='', tinamespace = 0):
               }
     r = requests.get(url=URL, params=PARAMS)
     data = r.json()
-    #print(data['query']['pages'][str(pageID)]['transcludedin'])
+    ID = str(list(ID)[0])
     for k in data['query']['pages'][ID]['transcludedin']:
         scope.append(k['title'])
     suite = True
@@ -284,13 +301,36 @@ def getID(page):
               }
     r = requests.get(url=URL, params=PARAMS)
     data = r.json()
-    for k in data['query']['pages']:
-        return k
+    return data['query']['pages'].keys()
+
+def getHisto(page, start=None, stop=None):
+    url = 'https://fr.wikipedia.org/w/api.php'
+    params = {'action':'query',
+              'format':'json',
+              'titles':page,
+              'rvprop':['ids', 'timestamp', 'flags', 'comment', 'user', 'size'],
+              'rvlimit':500,
+              'rvdir':'newer'
+        }
+    r = requests.get(url, params)
+    data = r.json()
+    return dict(data['query']['pages'].values())['revisions']
 
 
-
-
-
+def browseDeep(cat, level=-1):
+    scope = browse(cat)
+    underCats = []
+    for k in scope:
+        if 'Catégorie:' in k:
+            underCats.append(k[10:])
+    while level != 0:
+        underBis = underCats.copy()
+        underCats = []
+        for cat2 in underBis:
+                a = browseDeep(cat2, level=level-1)
+                scope += a[0]
+                underCats.append(a[1])
+    return scope, underCats
 
 
 
