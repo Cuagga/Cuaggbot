@@ -7,43 +7,14 @@ Created on Fri Jul  2 16:03:31 2021
 import requests
 import time
 
+
 soft_headers = {"User-Agent" : "CuaggBot (https://fr.wikipedia.org/wiki/Utilisateur:Cuaggbot)"}
 botUN ='Cuaggbot'
 
 
 url = 'https://fr.wikipedia.org/w/api.php'
 
-S = requests.Session()
 
-def login():
-    #get login token
-    params_0 = {
-    		"action":"query",
-    		"meta":"tokens",
-    		"type":"login",
-    		"format":"json"
-    		}
-    current_request = S.get(url = url, params = params_0, headers = soft_headers)
-    current_data = current_request.json()
-    login_token = current_data["query"]["tokens"]["logintoken"]
-    
-    #try to login
-    params_1 = {
-    "action":"login",
-    "lgname": botUN,
-    "lgpassword": botPW,
-    "lgtoken": login_token,
-    "format":"json"
-    		}
-    		
-    current_request = S.post(url, data = params_1, headers=soft_headers)
-    current_data = current_request.json()
-    login_result = current_data["login"]["result"]
-    if login_result == "Success":
-        print('Connecté')
-        return True
-    else:
-        return False
 
 
 def getEditToken(page):
