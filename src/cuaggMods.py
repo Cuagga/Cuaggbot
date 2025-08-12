@@ -8,6 +8,7 @@ import requests
 import time
 from loginCuagg import login
 import pandas as pd
+import numpy
 import re
 
 soft_headers = {"User-Agent" : "CuaggBot (https://fr.wikipedia.org/wiki/Utilisateur:Cuaggbot)"}
@@ -31,7 +32,6 @@ def getEditToken(page, S):
     
     r = S.get(url=url, params= params_0, headers=soft_headers)
     data = r.json()
-    print(data)
     edit_token = data["query"]["tokens"]["csrftoken"]
     #page_id = data["query"]["pageids"][0] #retrieve the page_title id, needed for the next line.
     
@@ -40,6 +40,7 @@ def getEditToken(page, S):
 
 def inport(page, S, maxAtt = 5):
     URL = "https://fr.wikipedia.org/w/api.php"
+    time.sleep(1)
     PARAMS = {
         "action": "parse",
         "page": page,
@@ -51,7 +52,7 @@ def inport(page, S, maxAtt = 5):
     attempts = 0
     while réussite == False and attempts < maxAtt:
         try:
-            r = S.post(url=URL, params=PARAMS)
+            r = S.post(url=URL, params=PARAMS, timeout=5)
             return r.json()["parse"]["wikitext"]["*"]
         except:
             attempts += 1
@@ -93,16 +94,14 @@ def browse(cat, S, cmcont=''):
             suite = False
     return scope
 
-def edit(page, text, S, summary = '', minor=1, isBot=0, maxTries=5):
+def edit(page, text, S, summary = '', minor=1, isBot=1, maxTries=5):
     wait = 10
-    slp = 60
     retry = True
     tries = 0
     while retry == True and tries <= maxTries:
-        tupel = getEditToken(page, S)
+        
         try:
-            editToken = tupel
-            print("Token gotten")
+            editToken = getEditToken(page, S)
         except:
             tries += 1
             time.sleep(2)
@@ -121,13 +120,11 @@ def edit(page, text, S, summary = '', minor=1, isBot=0, maxTries=5):
 			}
         req = S.post(url, data=params0)
         data = req.json()
-        print(data)
         try:
-            time.sleep(5)
+            
             result = data['edit']['result']
             if result=='Success':
                 retry = False
-                time.sleep(slp)
             else:
                 print('Réessai sur la page' + page)
                 print(result)
@@ -336,13 +333,35 @@ def getExtLinks(domain, S, cont='', flg=False):
         else:
             return data.title.unique()
     else:
-        time.sleep(5)
-        
-        data = pd.concat([pd.DataFrame.from_records(data["query"]["exturlusage"]),getExtLinks(domain, S, data["continue"]["eucontinue"], flg=True)])
-        return data.title.unique()
+        time.sleep(1)
+        data = numpy.concatenate([pd.DataFrame.from_records(data["query"]["exturlusage"]),getExtLinks(domain, S, data["continue"]["eucontinue"], flg=True)])
+        return data
     
-def paramValChange(page, template, S, keyPar, oldVal, newVal):
+def paramValChange(page: str, template: str, changes: dict, S:requests.Session=requests.Session()):
     #TODO : coder
+    
+    """
+    page est le nom (préfixé de l'espace de noms) de la page à laquelle accéder
+    template est le nom du modèle dont on veut remplacer un paramètre
+    S est la session qu'on veut maintenir
+    changes est le dictionnaire des changements à effectuer. 
+        Chaque clé est un paramètre utilisé par le modèle
+        Chaque valeur est un dictionnaire comprenant :
+            comme clés les valeurs à remplacer
+            comme valeurs leur remplacement
+            
+    """
+    try:
+        assert type(changes) == dict
+        for k in changes.values():
+            assert type(k) == dict
+            for val in k.values():
+                assert type(val) == str
+        
+    except AssertionError:
+        raise ValueError("changes a un format invalide")
+    flg = False
+    
     a = inport(page, S)
     groups = re.findall(f"({{{{{template}.+?}}}})", a)
     b = a
@@ -351,21 +370,22 @@ def paramValChange(page, template, S, keyPar, oldVal, newVal):
             dc = dictifyer(g)
         except Exception:
             continue
-        if keyPar in dc.keys():
-            if dc[keyPar] == oldVal:
-                dc[keyPar] = newVal
-                #print(dc)
-                new = undictify(template, dc)
-                b = f"{b[:fetch(b, g)]}{new}{b[fetch(b, g)+len(g):]}"
-    return b
+        
+        for key in dc.keys():
+            if key in changes.keys():
+                if dc[key] in changes[key].keys():
+                    dc[key] = changes[key][dc[key]]
+                    new = undictify(template, dc)
+                    b = f"{b[:fetch(b, g)]}{new}{b[fetch(b, g)+len(g):]}"
+                    flg = True
+    return b, flg, page
     
     
 
 def dictifyer(model):
     inner = model[2:-2]
     splittedInnard = inner.split("|")
-    print(splittedInnard)
-    dico = {i.split("=")[0]: i.split("=")[1] for i in splittedInnard[1:]}
+    dico = {i.split("=")[0]: i.split("=", maxsplit=1)[1] for i in splittedInnard[1:]}
     #print(dico)
     return dico
 
